@@ -277,13 +277,36 @@
   .bloom-flowers.bloomed .bloom-flower{ transform:scale(1) rotate(var(--rot,0deg)); opacity:.96; }
   .bloom-flower-svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 3px 8px rgba(20,10,15,.35)); }
 
+  /* ---------- scene: flowers scatter, then converge into a heart, then travel along its outline ---------- */
+  .heart-screen{ overflow:hidden; }
+  .heart-scene-stage{
+    position:relative;
+    width:min(88vw,520px); height:min(58vh,460px);
+    flex-shrink:0;
+  }
+  .heart-flowers{ position:absolute; inset:0; }
+  .heart-flower{ position:absolute; top:0; left:0; opacity:0; }
+  .heart-flower svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 2px 6px rgba(20,10,15,.3)); }
+  .heart-caption{
+    margin:18px 0 0; width:84%; text-align:center;
+    font-family:'Caveat',cursive; font-size:1.35rem; color:var(--cream);
+    opacity:0; transition:opacity .9s ease;
+  }
+  .heart-caption.show{ opacity:1; }
+  .heart-continue{
+    margin-top:20px; opacity:0; pointer-events:none; white-space:nowrap;
+    transform:translateY(8px);
+    transition:opacity .6s ease, transform .6s ease;
+  }
+  .heart-continue.show{ opacity:1; pointer-events:auto; transform:translateY(0); }
+
   @media (max-width:360px){
     .constellation{ margin-top:16px; }
   }
 
   @media (prefers-reduced-motion: reduce){
     .star, .heart-wrap.pulse, .heart-aura, .nebula, .petal, .bloom-flash, .gate-inputs.shake, .node-buket.shake .node-inner{ animation:none !important; }
-    .screen, .thread-fill, .node-inner, .bouquet-reveal, .petal-shape, .petal-center, .final-copy, .finale-heart, .btn-open, .btn-replay, .bloom-transition, .bloom-flower{
+    .screen, .thread-fill, .node-inner, .bouquet-reveal, .petal-shape, .petal-center, .final-copy, .finale-heart, .btn-open, .btn-replay, .bloom-transition, .bloom-flower, .heart-flower, .heart-caption, .heart-continue{
       transition-duration:.12s !important;
     }
   }
@@ -339,9 +362,18 @@
   <p class="lock-footer">dibuat dengan sepenuh hati 💛</p>
 </section>
 
+<!-- SCENE: FLOWERS SCATTER, THEN CONVERGE INTO A HEART, THEN TRAVEL ALONG ITS OUTLINE -->
+<section id="screen-heart" class="screen heart-screen">
+  <div class="heart-scene-stage" id="heartSceneStage">
+    <div class="heart-flowers" id="heartFlowers"></div>
+  </div>
+  <p class="heart-caption" id="heartCaption">dan dari sinilah semuanya bermula</p>
+  <button class="btn-open heart-continue" id="heartContinueBtn" type="button">Lanjut ke semesta kita <span aria-hidden="true">→</span></button>
+</section>
+
 <!-- SCREEN 2: CONSTELLATION OF MEMORIES (tilted 3D orbit) -->
 <section id="screen-world" class="screen">
-  <h2 class="world-title">Bintang di Antary'sa</h2>
+  <h2 class="world-title">Semesta Kecil Kita</h2>
   <p class="world-sub">Sentuh satu-satu titiknya, biar makin terang.</p>
 
   <div class="constellation" id="constellation">
@@ -620,6 +652,147 @@ Tiga bunga, satu cinta yang sama. Selamat ulang tahun, ayi. 🌸"</p>
     }
     return '<svg class="bloom-flower-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><g>' +
       petals + '<circle cx="50" cy="50" r="6" fill="' + centerColor + '"></circle></g></svg>';
+  }
+
+  /* ---------- scene: flowers scatter, converge into a heart, then travel along its outline ---------- */
+  function heartPoint(t){
+    var x = 16 * Math.pow(Math.sin(t), 3);
+    var y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+    return { x: x, y: y };
+  }
+
+  var heartSceneRafId = null;
+  var heartSceneRunning = false;
+
+  function runHeartScene(onComplete){
+    if (heartSceneRunning) return;
+    heartSceneRunning = true;
+
+    var stage = document.getElementById('heartSceneStage');
+    var container = document.getElementById('heartFlowers');
+    var caption = document.getElementById('heartCaption');
+    var continueBtn = document.getElementById('heartContinueBtn');
+    if (!stage || !container){ heartSceneRunning = false; if (onComplete) onComplete(); return; }
+
+    if (heartSceneRafId){ cancelAnimationFrame(heartSceneRafId); heartSceneRafId = null; }
+    container.innerHTML = '';
+    caption.classList.remove('show');
+    continueBtn.classList.remove('show');
+
+    switchScreen('screen-heart');
+
+    var stageW = stage.clientWidth || 320;
+    var stageH = stage.clientHeight || 320;
+    var cx = stageW / 2;
+    var cy = stageH / 2;
+    var heartScale = Math.min(stageW / 32, stageH / 28.92) * 0.78;
+    var yOffset = 2.54;
+
+    var palette = [['#F0C4CC', '#F6ECE2'], ['#C6667A', '#F6ECE2'], ['#F7D9E2', '#C6667A'], ['#D9A8C4', '#F6ECE2'], ['#E8B4C8', '#E3B873']];
+    var N = 46;
+    var flowers = [];
+
+    for (var i = 0; i < N; i++){
+      var el = document.createElement('div');
+      el.className = 'heart-flower';
+      var size = 24 + Math.random() * 20;
+      el.style.width = size.toFixed(0) + 'px';
+      el.style.height = size.toFixed(0) + 'px';
+      el.style.marginLeft = (-size / 2).toFixed(1) + 'px';
+      el.style.marginTop = (-size / 2).toFixed(1) + 'px';
+      var colors = palette[i % palette.length];
+      el.innerHTML = lilyFlowerSVG(colors[0], colors[1]);
+      container.appendChild(el);
+
+      var startX = Math.random() * stageW;
+      var startY = Math.random() * stageH;
+      el.style.transform = 'translate(' + startX.toFixed(1) + 'px,' + startY.toFixed(1) + 'px) scale(0)';
+
+      flowers.push({ el: el, startX: startX, startY: startY, angle: (i / N) * Math.PI * 2 });
+    }
+
+    var reduceMotion = false;
+    try{ reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(e){ reduceMotion = false; }
+
+    function finishScene(){
+      if (heartSceneRafId){ cancelAnimationFrame(heartSceneRafId); heartSceneRafId = null; }
+      heartSceneRunning = false;
+      if (onComplete) onComplete();
+    }
+
+    if (reduceMotion){
+      for (var s = 0; s < flowers.length; s++){
+        var fs = flowers[s];
+        var ps = heartPoint(fs.angle);
+        var txs = cx + ps.x * heartScale;
+        var tys = cy + (ps.y - yOffset) * heartScale;
+        fs.el.style.transform = 'translate(' + txs.toFixed(1) + 'px,' + tys.toFixed(1) + 'px) scale(1)';
+        fs.el.style.opacity = '1';
+      }
+      caption.classList.add('show');
+      continueBtn.classList.add('show');
+      continueBtn.onclick = finishScene;
+      return;
+    }
+
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        for (var k = 0; k < flowers.length; k++){
+          var fk = flowers[k];
+          fk.el.style.transition = 'opacity .5s ease, transform .5s cubic-bezier(.34,1.56,.64,1)';
+          fk.el.style.transform = 'translate(' + fk.startX.toFixed(1) + 'px,' + fk.startY.toFixed(1) + 'px) scale(1)';
+          fk.el.style.opacity = '1';
+        }
+      });
+    });
+
+    var convergeStart = 750;
+    var convergeDuration = 1500;
+    var convergeEnd = convergeStart + convergeDuration;
+    var circulateSpeed = (Math.PI * 2) / 15000;
+    var startTime = null;
+    var captionShown = false;
+    var btnShown = false;
+
+    function frame(ts){
+      if (startTime === null) startTime = ts;
+      var elapsed = ts - startTime;
+
+      if (elapsed >= convergeStart && elapsed < convergeEnd){
+        var p = (elapsed - convergeStart) / convergeDuration;
+        var ease = 1 - Math.pow(1 - p, 3);
+        for (var i2 = 0; i2 < flowers.length; i2++){
+          var f2 = flowers[i2];
+          var target = heartPoint(f2.angle);
+          var tx = cx + target.x * heartScale;
+          var ty = cy + (target.y - yOffset) * heartScale;
+          var x = f2.startX + (tx - f2.startX) * ease;
+          var y = f2.startY + (ty - f2.startY) * ease;
+          f2.el.style.transition = 'none';
+          f2.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) scale(1)';
+        }
+      } else if (elapsed >= convergeEnd){
+        if (!captionShown){ caption.classList.add('show'); captionShown = true; }
+        var circElapsed = elapsed - convergeEnd;
+        for (var j2 = 0; j2 < flowers.length; j2++){
+          var fj = flowers[j2];
+          var t = fj.angle + circElapsed * circulateSpeed;
+          var pos = heartPoint(t);
+          var x2 = cx + pos.x * heartScale;
+          var y2 = cy + (pos.y - yOffset) * heartScale;
+          fj.el.style.transform = 'translate(' + x2.toFixed(1) + 'px,' + y2.toFixed(1) + 'px) scale(1)';
+        }
+        if (!btnShown && circElapsed > 500){
+          continueBtn.classList.add('show');
+          btnShown = true;
+        }
+      }
+
+      heartSceneRafId = requestAnimationFrame(frame);
+    }
+    heartSceneRafId = requestAnimationFrame(frame);
+
+    continueBtn.onclick = finishScene;
   }
 
   /* ---------- gentle synthesized chime, used if no real song file is provided ---------- */
@@ -966,7 +1139,7 @@ Tiga bunga, satu cinta yang sama. Selamat ulang tahun, ayi. 🌸"</p>
     }
 
     document.getElementById('openBtn').addEventListener('click', function(){
-      switchScreen('screen-world');
+      runHeartScene(function(){ switchScreen('screen-world'); });
     });
 
     document.getElementById('replayBtn').addEventListener('click', function(){
